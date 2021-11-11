@@ -1,0 +1,44 @@
+#!/bin/bash
+images[0]='720p.jpg'
+images[1]='1080p.jpg'
+images[2]='4k.jpg'
+N_IMG=3
+TEST_CASES=3
+
+
+#echo $FILE_IN >> Time_file.txt
+
+gcc -std=c11 -Wall blurImageSeq.c -o blur.o -fopenmp -lm
+for((i=1;i<2; i+=1))
+do 
+    TIMES=TEST_Time_file_$i.csv
+    if [ -f "$TIMES" ]; then 
+        rm TEST_Time_file_$i.csv
+    fi   
+
+    echo "Kernel_size,Threads,Try_1,Try_2,Try_3" >> Time_file_$i.csv
+    FILE_IN=${images[i]}
+    echo $FILE_IN
+    for ((k=5;k<=5; k+=2))
+    do 
+        KERNEL_SZ=$k
+        #printf "%i," "$KERNEL_SZ" >> Time_file.txt
+        for((c=1;c<=16;c*=2))
+        do  
+            FILE_OUT=test.jpg
+            THREADS=$c
+            run_time=0
+            printf "%i,%i" "$KERNEL_SZ" "$THREADS" >> Time_file_$i.csv
+            for ((t=0; t<TEST_CASES; t+=1))
+            do
+                printf ',' >> Time_file_$i.csv
+                ./blur.o $FILE_IN $FILE_OUT $THREADS $KERNEL_SZ >> TEST_Time_file_$i.csv
+
+            done
+            
+            echo "" >> Time_file_$i.csv
+        done
+    done
+    echo "Running python script"
+    python Plots.py <<< "$i ${images[i]}"
+done

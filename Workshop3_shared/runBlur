@@ -1,0 +1,53 @@
+#!/bin/bash
+images[0]='720p.jpg'
+images[1]='1080p.jpg'
+images[2]='4k.jpg'
+N_IMG=3
+TEST_CASES=3
+Num_blocks=3
+Num_cores_mp=128
+
+
+
+#echo $FILE_IN >> Time_file.txt
+make clean
+make
+for((i=0;i<N_IMG; i+=1))
+do 
+    TIMES=Time_$1_file_$i.csv
+    if [ -f "$TIMES" ]; then 
+        rm $TIMES
+    fi   
+
+    echo "Num_blocks,Threads,Kernel_size,Try_1,Try_2,Try_3" >> $TIMES
+    FILE_IN=${images[i]}
+    echo $FILE_IN
+    for ((b=0;b<=2*Num_blocks; b+=Num_blocks))
+    do 
+        BLOCK=$b
+        if [[ "$BLOCK" == "0" ]]; then
+            BLOCK=1 
+        fi
+        for ((c=Num_cores_mp;c<=2*Num_cores_mp;c+=Num_cores_mp/2))
+        do  
+            THREADS=$c
+            for ((k = 3 ; k <= 15 ; k+=2))
+            do
+                FILE_OUT=test.jpg
+                KERNEL_SZ=$k
+                run_time=0
+                printf "%i,%i,%i" "$BLOCK" "$THREADS" "$KERNEL_SZ" >> $TIMES
+                for ((t=0; t<TEST_CASES; t+=1))
+                do
+                    printf ',' >> $TIMES
+                    ./blur $FILE_IN $FILE_OUT $BLOCK $THREADS $KERNEL_SZ >> $TIMES
+
+                done
+                
+                echo "" >> $TIMES
+            done
+        done
+    done
+    echo "Running python script"
+    #python Plots.py <<< "${TIMES} ${images[i]}_$2"
+done

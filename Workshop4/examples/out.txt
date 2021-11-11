@@ -1,0 +1,15 @@
+--------------------------------------------------------------------------
+[[62109,1],0]: A high-performance Open MPI point-to-point messaging module
+was unable to find any relevant network interfaces:
+
+Module: OpenFabrics (openib)
+  Host: cluster-master
+
+Another transport will be used instead, although this may result in
+lower performance.
+--------------------------------------------------------------------------
+node 1: Hello, world!
+node 2: Hello, world!
+node 0: Hello, world!
+node 4: Hello, world!
+node 3: Hello, world!

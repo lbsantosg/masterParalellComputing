@@ -1,0 +1,19 @@
+Practica # 1 
+Computación paralela y distribuida
+Integrantes: 
+Juan Sebastian Chaves
+Laura Beatriz Santos 
+
+Tema: aplicar efecto borroso a una imágen mediante uso de hilos (POSIX)
+
+Librería necesaria: stb_image 
+
+Compilación con flags: gcc -std=c11 -Wall blurImageSeq.c -o blur.o -lpthread -lm
+
+Código de uso de hilos: blurImageSeq.c 
+
+Código de graficación: Plots.py
+
+Output: Time_file_0/1/2 corresponden a los archivos con los tiempos registrados para las diferentes imágenes (720p, 1080p y 4k) respectivamente. 
+
+Correr el bash file "runBlur" para ejecutar el archivo sobre todas las imágenes, generar los tiempos en un archivo output y graficarlos. 
