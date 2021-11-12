@@ -79,6 +79,53 @@ void *fillMatrixBlur(void *arg){
    return 0;
 }
 
+
+
+void *fillMatrixEdgeRecon(void *arg){
+   int K[3][3] = {{-1,-1,-1}, {-1, 8, -1}, {-1,-1,-1}}; // Outline
+   //int K[3][3] = {{0,-1,0}, {-1, 5, -1}, {0,-1,0}}; // Sharpen
+   int K_sz = 3;
+   int initIteration, endIteration, threadId = *(int *)arg; 
+   initIteration = (width / threads) * threadId; 
+   endIteration =(threadId == threads-1? width : initIteration + (width/threads));
+
+   for (int x = 0; x < height; x++ ) {
+      for (int y = initIteration; y< endIteration; y++) {
+         // para cada uno de los canales se debe realizar la convolucion 
+         for (int ch = 0; ch < channels; ch++) {
+
+            // el pixel al que se le esta realizando la convolucion
+            unsigned char *current_pix = output_img + (x*width+y)*channels + ch;
+            
+            int nval = 0;
+            // se itera por una matriz del tamano del kernel
+            for (int nx = x - (K_sz)/2, xk =0 ; nx < x+(K_sz)/2 + (K_sz&1); nx++, xk++) {
+               for (int ny = y - (K_sz)/2, yk = 0; ny < y+(K_sz)/2 + (K_sz&1); ny++, yk++) {
+                  int xi = mymax(0, nx);
+                  xi = mymin(height-1, xi);
+                  int yi = mymax(0, ny);
+                  yi = mymin(width-1, yi);
+
+                  unsigned char* npix = input_img + (xi*width+yi)*channels+ch;
+
+                  nval += *npix * K[xk][yk] ; 
+               }
+
+            }
+            nval = mymax(0, nval);
+            nval = mymin(nval, 255);
+    
+            if (ch != 1) 
+               *current_pix = (uint8_t) nval;
+            else
+               *current_pix = (uint8_t) 0;
+
+         }
+      }
+   } 
+   return 0;
+}
+
 int main(int argc, char *argv[]) {
    
    
@@ -105,7 +152,7 @@ int main(int argc, char *argv[]) {
    pthread_t thread[threads];
 
    loadImage(&input_img, name_file_in, &width, &height, &channels ); 
-
+   printf("Channels : %d\n", channels);
    size_t img_size = width*height*channels; 
 
    output_img = malloc(img_size);
@@ -114,7 +161,7 @@ int main(int argc, char *argv[]) {
 
    for ( i = 0 ; i < threads ; i ++){
       threadId[i] = i; 
-      pthread_create(&thread[i],NULL,(void *)fillMatrixBlur,&threadId[i]);
+      pthread_create(&thread[i],NULL,(void *)fillMatrixEdgeRecon,&threadId[i]);
    }
    for( i = 0 ; i < threads ; i++){
       pthread_join(thread[i],(void **)&retval);
