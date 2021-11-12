@@ -9,7 +9,7 @@
 
 int main(void) {
     int width, height, channels;
-    unsigned char *img = stbi_load("mario.png", &width, &height, &channels, 0);
+    unsigned char *img = stbi_load("720p.jpg", &width, &height, &channels, 0);
     if (img == NULL) {
         printf("Error in loading the image\n");
         exit(1);
@@ -34,7 +34,7 @@ int main(void) {
         }
     }
 
-    stbi_write_png("test.png", width, height, gray_channels, gray_img, width*gray_channels);
+    stbi_write_png("testLaura.png", width, height, gray_channels, gray_img, width*gray_channels);
 
     stbi_image_free(img);
     free(gray_img);

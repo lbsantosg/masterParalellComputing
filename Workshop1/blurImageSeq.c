@@ -1,4 +1,6 @@
 
+//to compile: gcc -o blurImageSeq blurImageSeq.c -lm -lpthread
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -85,7 +87,7 @@ int main(int argc, char *argv[]) {
    
    
    if (argc != 5) {
-      fprintf(stderr, "Usaste solo %d argumento(s), ingrese el nombre de la"
+      fprintf(stderr, "No se ha ingresado la cantidad correcta de argumentos. Actualmente hay %d argumento(s), ingrese el nombre de la"
       "imagen de entrada, el nombre de la imagen de salida, el número de"
       " hílos y el tamaño del kernel\n", argc);
 
