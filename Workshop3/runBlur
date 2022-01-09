@@ -3,8 +3,15 @@ images[0]='720p.jpg'
 images[1]='1080p.jpg'
 images[2]='4k.jpg'
 N_IMG=3
+FILE_KERNEL='emboss.txt'
 TEST_CASES=3
-Num_blocks=3
+blocks[0]=1
+blocks[1]=2
+blocks[2]=7
+blocks[3]=14
+blocks[4]=21
+blocks[5]=28
+sz_block=6
 Num_cores_mp=128
 
 
@@ -19,33 +26,27 @@ do
         rm $TIMES
     fi   
 
-    echo "Num_blocks,Threads,Kernel_size,Try_1,Try_2,Try_3" >> $TIMES
+    echo "Num_blocks,Threads,Try_1,Try_2,Try_3" >> $TIMES
     FILE_IN=${images[i]}
     echo $FILE_IN
-    for ((b=0;b<=2*Num_blocks; b+=Num_blocks))
+    for ((b=0;b<sz_block; b+=1))
     do 
-        BLOCK=$b
-        if [[ "$BLOCK" == "0" ]]; then
-            BLOCK=1 
-        fi
-        for ((c=Num_cores_mp;c<=2*Num_cores_mp;c+=Num_cores_mp/2))
+        BLOCK=${blocks[b]}
+        for ((c=2;c<=2*Num_cores_mp;c*=2))
         do  
             THREADS=$c
-            for ((k = 3 ; k <= 15 ; k+=2))
+            FILE_OUT=test.jpg
+            run_time=0
+            printf "%i,%i" "$BLOCK" "$THREADS" >> $TIMES
+            for ((t=0; t<TEST_CASES; t+=1))
             do
-                FILE_OUT=test.jpg
-                KERNEL_SZ=$k
-                run_time=0
-                printf "%i,%i,%i" "$BLOCK" "$THREADS" "$KERNEL_SZ" >> $TIMES
-                for ((t=0; t<TEST_CASES; t+=1))
-                do
-                    printf ',' >> $TIMES
-                    ./blur $FILE_IN $FILE_OUT $BLOCK $THREADS $KERNEL_SZ >> $TIMES
+                printf ',' >> $TIMES
+                echo $FILE_IN $FILE_OUT $BLOCK $THREADS $FILE_KERNEL
+                ./blur $FILE_IN $FILE_OUT $BLOCK $THREADS $FILE_KERNEL >> $TIMES
 
-                done
-                
-                echo "" >> $TIMES
             done
+            
+            echo "" >> $TIMES
         done
     done
     echo "Running python script"

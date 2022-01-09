@@ -1,5 +1,3 @@
-
-
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 
@@ -21,6 +19,13 @@
 #define mymax( x,  y) (x > y ? x : y)
 #define mymin( x,  y) (x < y ? x : y)
 #define PrintGpuDesc false
+
+
+//float K[3][3] = {{-1,-1,-1}, {-1, 8, -1}, {-1,-1,-1}}; // Outline
+//float K[3][3] = {{0,-1,0}, {-1, 5, -1}, {0,-1,0}}; // Sharpen
+//float K[3][3] = {{0.11111111111,0.11111111111,0.11111111111}, {0.11111111111, 0.11111111111, 0.11111111111}, {0.11111111111,0.11111111111,0.11111111111}}; // blur
+// 
+
 void loadImage(unsigned char **img, char *filename, int *width, int *height, int *channels)
 {
 
@@ -42,10 +47,10 @@ void loadImage(unsigned char **img, char *filename, int *width, int *height, int
 /*kernel
 *****************************************************************************/
 
-__global__ void img_blr(unsigned char *input_img , unsigned char *output_img, int width, int height, int channels, int kernel_sz, 
+__global__ void img_blr(unsigned char *input_img , unsigned char *output_img, int width, int height, int channels, int kernel_sz, float *K,
     int n_sp, int sz_sp, int blocks, int threads ){
     
-
+    // float K...
 
     int init_iter_sp = (n_sp / blocks) *  blockIdx.x;
     int end_iter_sp = (blockIdx.x == blocks-1 ? n_sp : init_iter_sp + (n_sp/blocks)); 
@@ -58,7 +63,6 @@ __global__ void img_blr(unsigned char *input_img , unsigned char *output_img, in
 
     __shared__ unsigned char img_portion[128][128][3];
 
-
     int total_pixels_to_copy_per_step = 128 * 128;
 
     int threadId = threadIdx.x;
@@ -68,7 +72,7 @@ __global__ void img_blr(unsigned char *input_img , unsigned char *output_img, in
     initIteration = (total_pixels_to_copy_per_step / threads) * threadId; 
     endIteration =(threadId == threads-1? total_pixels_to_copy_per_step : initIteration + (total_pixels_to_copy_per_step/threads));
     
-    int col_super_pixels =  width / sz_sp + ((width % sz_sp) != 0 ) ;
+    int col_super_pixels =  width / sz_sp +  ((width % sz_sp) != 0 ) ;
 
     int total_pixels_to_process_per_step = sz_sp*sz_sp;
     int initIterationProc = (total_pixels_to_process_per_step / threads) * threadId; 
@@ -109,13 +113,15 @@ __global__ void img_blr(unsigned char *input_img , unsigned char *output_img, in
             if( xg >= height or yg >= width) continue;
             for (int ch = 0; ch < channels; ch++) {
                 unsigned char *current_pix_out = output_img + (xg*width+yg)*channels + ch;
-                int nval = 0;
-                for (int nx = xr - (kernel_sz)/2; nx < xr+(kernel_sz)/2 + (kernel_sz&1); nx++) {
-                    for (int ny = yr - (kernel_sz)/2; ny < yr+(kernel_sz)/2 + (kernel_sz&1); ny++) {
-                        nval += img_portion[nx][ny][ch];
+                float f_nval = 0;
+                for (int nx = xr - (kernel_sz)/2, xk = 0; nx < xr+(kernel_sz)/2 + (kernel_sz&1); nx++, xk++) {
+                    for (int ny = yr - (kernel_sz)/2, yk =0; ny < yr+(kernel_sz)/2 + (kernel_sz&1); ny++, yk++) {
+                        f_nval += img_portion[nx][ny][ch] * K[xk*kernel_sz + yk];
                     }                                
                 }
-                nval = nval/( kernel_sz*kernel_sz);;
+                int nval = f_nval;
+                nval = mymax(0, nval);
+                nval = mymin(nval, 255);
                 *current_pix_out = (unsigned char) nval;
             }
             
@@ -136,19 +142,32 @@ char name_file_in[255], name_file_out[255];
 
 int main(int argc, char *argv[])
 {   
+   
     if (argc != 6) {
         fprintf(stderr, "Usaste solo %d argumento(s), ingrese el nombre de la"
         "imagen de entrada, el nombre de la imagen de salida, el número de bloques, "
-        " el de hílos por bloque y el tamaño del kernel\n", argc);
+        " el de hílos por bloque y nombre del archivo del kernel\n", argc);
   
         exit(-1);
     }
 
     strcpy(name_file_in, argv[1]);
     strcpy(name_file_out, argv[2]);
-    int kernel_sz = atoi(argv[5]);
+    int kernel_sz = 3;
     int threads_per_block = atoi(argv[4]);
     int num_blocks = atoi(argv[3]);
+
+    //Read kernel info from file;
+    FILE *kernel_file = fopen(argv[5], "r");
+    fscanf(kernel_file, "%d", &kernel_sz);
+    size_t mat_sz = kernel_sz * kernel_sz * sizeof(float);
+    float *K = (float*) malloc(mat_sz);  // Outline
+    if (kernel_sz > 50) {
+        fprintf(stderr,
+        "Tamano de kernel superior a 50");
+        exit(-1);
+    }
+    for (int i=0; i<kernel_sz * kernel_sz; i++) fscanf(kernel_file, "%f", &K[i]);
 
     struct timeval  tv1, tv2; 
     gettimeofday(&tv1, NULL); 
@@ -210,7 +229,7 @@ int main(int argc, char *argv[])
     //Variables for device
     unsigned char *d_input_img;
     unsigned char *d_output_img;
-
+    float *d_K;
     // Load image data and allocate host memory
     loadImage(&h_input_img, name_file_in, &width, &height, &channels);
 
@@ -235,8 +254,14 @@ int main(int argc, char *argv[])
     cudaError_t err = cudaSuccess;
 
 
-    err = cudaMalloc((void**)&d_input_img, img_size);
+    err = cudaMalloc((void**)&d_K, mat_sz);
+    if (err != cudaSuccess){
+        fprintf(stderr, "Failed to allocate device vector C (input img) (error code %s)!\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
 
+
+    err = cudaMalloc((void**)&d_input_img, img_size);
     if (err != cudaSuccess){
         fprintf(stderr, "Failed to allocate device vector C (input img) (error code %s)!\n", cudaGetErrorString(err));
         exit(EXIT_FAILURE);
@@ -257,10 +282,17 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+
+    err = cudaMemcpy(d_K, K, mat_sz, cudaMemcpyHostToDevice);
+    if (err != cudaSuccess){
+        fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
+
    
   
 
-    img_blr<<<num_blocks, threads_per_block>>>(d_input_img, d_output_img, width, height, channels, kernel_sz, total_super_pixels, sz_super_pixel, num_blocks,  threads_per_block);
+    img_blr<<<num_blocks, threads_per_block>>>(d_input_img, d_output_img, width, height, channels, kernel_sz, d_K, total_super_pixels, sz_super_pixel, num_blocks,  threads_per_block);
 
 
 
@@ -296,9 +328,7 @@ int main(int argc, char *argv[])
 
     stbi_image_free(h_input_img);
     free(h_output_img);
-
-  
-
+    free(K);
     gettimeofday(&tv2, NULL);  
     printf ("%f", (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +(double) (tv2.tv_sec - tv1.tv_sec));
    

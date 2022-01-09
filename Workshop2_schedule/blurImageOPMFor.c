@@ -25,8 +25,12 @@ unsigned char *input_img;
 unsigned char *output_img;
 
 char name_file_in[255], name_file_out[255];
-int kernel_sz, threads;
-
+float K[3][3] = {{-2,0,-1,0,0}, {0, -2, -1, 0 , 0}, {-1,-1,1,1,1}, {0,0,1,2,0}, {0,0,1,0,2}; // Outline
+//float K[3][3] = {{0,-1,0}, {-1, 5, -1}, {0,-1,0}}; // Sharpen
+//float K[3][3] = {{0.11111111111,0.11111111111,0.11111111111}, {0.11111111111, 0.11111111111, 0.11111111111}, {0.11111111111,0.11111111111,0.11111111111}}; // blur
+// 
+int kernel_sz = 3, threads;
+int K_sz= 5;
 // order file_in_name file_out_name threads kernel_sz
 
 void loadImage(unsigned char **img, char *filename, int *width, int *height, int *channels)
@@ -46,7 +50,7 @@ void loadImage(unsigned char **img, char *filename, int *width, int *height, int
 int main(int argc, char *argv[])
 {
 
-    if (argc != 5)
+    if (argc != 4)
     {
         fprintf(stderr, "Usaste solo %d argumento(s), ingrese el nombre de la"
                         "imagen de entrada, el nombre de la imagen de salida, el número de"
@@ -58,7 +62,6 @@ int main(int argc, char *argv[])
 
     strcpy(name_file_in, argv[1]);
     strcpy(name_file_out, argv[2]);
-    kernel_sz = atoi(argv[4]);
     threads = atoi(argv[3]);
 
     loadImage(&input_img, name_file_in, &width, &height, &channels);
@@ -77,34 +80,32 @@ int main(int argc, char *argv[])
          //   printf("%d %d\n", y, omp_get_thread_num());
             for (int x = 0; x < height; x++)
             {
+                for (int ch = 0; ch < channels; ch++) {
 
-                // para cada uno de los canales se debe realizar la convolucion
-                for (int ch = 0; ch < channels; ch++)
-                {
-
-                    // el pixel al que se le esta realizando la convolucion
-                    unsigned char *current_pix = output_img + (x * width + y) * channels + ch;
-
-                    int nval = 0;
+                // el pixel al que se le esta realizando la convolucion
+                    unsigned char *current_pix = output_img + (x*width+y)*channels + ch;
+                    
+                    float f_nval = 0;
                     // se itera por una matriz del tamano del kernel
-                    for (int nx = x - (kernel_sz) / 2; nx < x + (kernel_sz) / 2 + (kernel_sz & 1); nx++)
-                    {
-                        for (int ny = y - (kernel_sz) / 2; ny < y + (kernel_sz) / 2 + (kernel_sz & 1); ny++)
-                        {
+                    for (int nx = x - (K_sz)/2, xk =0 ; nx < x+(K_sz)/2 + (K_sz&1); nx++, xk++) {
+                        for (int ny = y - (K_sz)/2, yk = 0; ny < y+(K_sz)/2 + (K_sz&1); ny++, yk++) {
                             int xi = mymax(0, nx);
-                            xi = mymin(height - 1, xi);
+                            xi = mymin(height-1, xi);
                             int yi = mymax(0, ny);
-                            yi = mymin(width - 1, yi);
+                            yi = mymin(width-1, yi);
 
-                            unsigned char *npix = input_img + (xi * width + yi) * channels + ch;
+                            unsigned char* npix = input_img + (xi*width+yi)*channels+ch;
 
-                            nval += *npix;
+                            f_nval += *npix * K[xk][yk] ; 
                         }
-                    }
-                    nval = nval / (kernel_sz * kernel_sz);
 
-                    *current_pix = (uint8_t)nval;
+                    }
+                    int nval = f_nval;
+                    nval = mymax(0, nval);
+                    nval = mymin(nval, 255);
+                    *current_pix = (uint8_t) nval;
                 }
+
             }
         }
     }

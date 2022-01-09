@@ -50,7 +50,7 @@ void loadImage(unsigned char **img, char *filename, int *width, int *height, int
 /*kernel
 *****************************************************************************/
 
-__global__ void img_blr(unsigned char *input_img , unsigned char *output_img, int width, int height, int channels, int kernel_sz, int threads ){
+__global__ void img_blr(unsigned char *input_img , unsigned char *output_img, int width, int height, int channels, int kernel_sz, float* K, int threads ){
     
 
 
@@ -68,22 +68,22 @@ __global__ void img_blr(unsigned char *input_img , unsigned char *output_img, in
 
                 // el pixel al que se le esta realizando la convolucion
                 unsigned char *current_pix = output_img + (x*width+y)*channels + ch;
-                
-                int nval = 0;
+                float f_nval = 0; 
                 // se itera por una matriz del tamano del kernel
-                for (int nx = x - (kernel_sz)/2; nx < x+(kernel_sz)/2 + (kernel_sz&1); nx++) {
-                    for (int ny = y - (kernel_sz)/2; ny < y+(kernel_sz)/2 + (kernel_sz&1); ny++) {
+                for (int nx = x - (kernel_sz)/2, xk = 0; nx < x+(kernel_sz)/2 + (kernel_sz&1); nx++, xk++) {
+                    for (int ny = y - (kernel_sz)/2, yk =0; ny < y+(kernel_sz)/2 + (kernel_sz&1); ny++, yk++) {
                         int xi = mymax(0, nx);
                         xi = mymin(height-1, xi);
                         int yi = mymax(0, ny);
                         yi = mymin(width-1, yi);
 
                         unsigned char* npix = input_img + (xi*width+yi)*channels+ch;
-
-                        nval += *npix;
+                        f_nval += *npix * K[xk*kernel_sz + yk];
                     }
                 }
-                nval = nval/( kernel_sz*kernel_sz);
+                int nval = f_nval;
+                nval = mymax(0, nval);
+                nval = mymin(nval, 255);
               
                 *current_pix = (unsigned char) nval;
             }
@@ -99,22 +99,33 @@ __global__ void img_blr(unsigned char *input_img , unsigned char *output_img, in
 
 int main(int argc, char *argv[])
 {   
-   if (argc != 6) {
-      fprintf(stderr, "Usaste solo %d argumento(s), ingrese el nombre de la"
-      "imagen de entrada, el nombre de la imagen de salida, el número de bloques, "
-      " el de hílos por bloque y el tamaño del kernel\n", argc);
-
-      exit(-1);
-   }
-
+    if (argc != 6) {
+        fprintf(stderr, "Usaste solo %d argumento(s), ingrese el nombre de la"
+        "imagen de entrada, el nombre de la imagen de salida, el número de bloques, "
+        " el de hílos por bloque y nombre del archivo del kernel\n", argc);
+  
+        exit(-1);
+    }
+   
     strcpy(name_file_in, argv[1]);
     strcpy(name_file_out, argv[2]);
-    int kernel_sz = atoi(argv[5]);
+    int kernel_sz = 3;
     int threads_per_block = atoi(argv[4]);
     int num_blocks = atoi(argv[3]);
 
     //printf("%d %d %d\n", num_blocks, threads_per_block, kernel_sz);
     //int nBlocks = deviceProp.
+    FILE *kernel_file = fopen(argv[5], "r");
+    fscanf(kernel_file, "%d", &kernel_sz);
+    size_t mat_sz = kernel_sz * kernel_sz * sizeof(float);
+    float *K = (float*) malloc(mat_sz);  // Outline
+    if (kernel_sz > 50) {
+        fprintf(stderr,
+        "Tamano de kernel superior a 50");
+        exit(-1);
+    }
+    for (int i=0; i<kernel_sz * kernel_sz; i++) fscanf(kernel_file, "%f", &K[i]);
+
     struct timeval  tv1, tv2; 
     gettimeofday(&tv1, NULL); 
 
@@ -162,7 +173,7 @@ int main(int argc, char *argv[])
     //Variables for device
     unsigned char *d_input_img;
     unsigned char *d_output_img;
-
+    float *d_K;
     // Load image data and allocate host memory
     loadImage(&h_input_img, name_file_in, &width, &height, &channels);
     
@@ -179,6 +190,12 @@ int main(int argc, char *argv[])
     // Allocate device memory 
     cudaError_t err = cudaSuccess;
 
+
+    err = cudaMalloc((void**)&d_K, mat_sz);
+    if (err != cudaSuccess){
+        fprintf(stderr, "Failed to allocate device vector C (input img) (error code %s)!\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
 
     err = cudaMalloc((void**)&d_input_img, img_size);
 
@@ -202,12 +219,16 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+    err = cudaMemcpy(d_K, K, mat_sz, cudaMemcpyHostToDevice);
+    if (err != cudaSuccess){
+        fprintf(stderr, "Failed to copy vector C from device to host (error code %s)!\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
 
     int total_threads = num_blocks * threads_per_block;
-    img_blr<<<num_blocks, threads_per_block>>>(d_input_img, d_output_img, width, height, channels, kernel_sz,  total_threads);
+    img_blr<<<num_blocks, threads_per_block>>>(d_input_img, d_output_img, width, height, channels, kernel_sz, d_K ,  total_threads);
 
 
-    gettimeofday(&tv1, NULL);
     // Copy data to host memory
     err = cudaMemcpy(h_output_img, d_output_img, img_size, cudaMemcpyDeviceToHost);
     
@@ -216,6 +237,8 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
+
+ 
     // free device memory
     err = cudaFree(d_input_img);
     if (err != cudaSuccess){
@@ -224,6 +247,12 @@ int main(int argc, char *argv[])
     }
 
     err = cudaFree(d_output_img);
+    if (err != cudaSuccess){
+        fprintf(stderr, "Failed to free device vector C (error code %s)!\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
+
+    err = cudaFree(d_K);
     if (err != cudaSuccess){
         fprintf(stderr, "Failed to free device vector C (error code %s)!\n", cudaGetErrorString(err));
         exit(EXIT_FAILURE);
@@ -239,7 +268,7 @@ int main(int argc, char *argv[])
 
     stbi_image_free(h_input_img);
     free(h_output_img);
-
+    free(K);
 
     gettimeofday(&tv2, NULL);  
     printf ("%f", (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +(double) (tv2.tv_sec - tv1.tv_sec));
