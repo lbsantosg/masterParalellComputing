@@ -2,14 +2,15 @@
 images[0]='720p.jpg'
 images[1]='1080p.jpg'
 images[2]='4k.jpg'
-N_IMG=3
+images[3]='8k.jpg'
+N_IMG=4
 TEST_CASES=3
 
 
 #echo $FILE_IN >> Time_file.txt
 
 gcc -std=c11 -Wall imageFiltersOMP.c -o imageFilter.o -fopenmp -lm
-for((i=0;i<3; i+=1))
+for((i=0;i<4; i+=1))
 do 
     TIMES=Time_file_$i.csv
     if [ -f "$TIMES" ]; then 

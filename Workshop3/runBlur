@@ -2,7 +2,8 @@
 images[0]='720p.jpg'
 images[1]='1080p.jpg'
 images[2]='4k.jpg'
-N_IMG=3
+images[3]='8k.jpg'
+N_IMG=4
 FILE_KERNEL='emboss.txt'
 TEST_CASES=3
 blocks[0]=1

@@ -319,7 +319,9 @@ int main(int argc, char *argv[])
 
 
 
-    // write output image file
+    gettimeofday(&tv2, NULL);  
+    printf ("%f", (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +(double) (tv2.tv_sec - tv1.tv_sec));
+     // write output image file
 
     
     stbi_write_jpg(name_file_out, width, height, channels, h_output_img, 100);
@@ -329,9 +331,7 @@ int main(int argc, char *argv[])
     stbi_image_free(h_input_img);
     free(h_output_img);
     free(K);
-    gettimeofday(&tv2, NULL);  
-    printf ("%f", (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +(double) (tv2.tv_sec - tv1.tv_sec));
-   
+  
    // puts("Program run succesfully");
     return 0;
 }

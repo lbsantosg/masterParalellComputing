@@ -20,7 +20,7 @@ Num_cores_mp=128
 #echo $FILE_IN >> Time_file.txt
 make clean
 make
-for((i=3;i<N_IMG; i+=1))
+for((i=0;i<N_IMG; i+=1))
 do 
     TIMES=Time_$1_file_$i.csv
     if [ -f "$TIMES" ]; then 
